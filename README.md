@@ -40,6 +40,23 @@ At **20 looks** (20.8% of image pixels revealed), mean PSNR was:
 
 **Disagreement: +3.21 dB over random — passes the pre-registered gate.** However, the gain over the strong coarse-edge baseline is only +0.41 dB, and **feedback adds 0.00 dB — fails its gate**. Four scenes are insufficient for broad claims. See [RESULTS.md](RESULTS.md) for per-image results, caveats, and the [actual GitHub Actions run](https://github.com/anttiluode/SihtiSilma/actions/runs/42649869626).
 
+## v2: 200 fresh photos (Claude, 9 Nov 2026)
+
+[Preregistered](PREREG_V2.md) before running, then measured once on all 200 BSDS500 **test** photos ([results](RESULTS_V2.md)).
+
+| After 20 looks | dB |
+|---|---:|
+| Coarse + edge-chosen tiles, no memory | 22.19 |
+| P3 + edge-chosen tiles | 23.49 |
+| **P3 + memory-disagreement tiles** | **24.06** |
+| **P3 + feedback v2** | **24.18** |
+| Oracle (ceiling) | 25.03 |
+
+- **The memory does help decide where to look:** +0.57 dB over edge-chosen looks, better on 89% of photos (95% CI 0.49–0.66). On the four dev photos this looked negligible.
+- **v1's feedback was disconnected, not refuted.** A clamp made every tile's multiplier the same. Made scale-free, it adds +0.12 dB (CI 0.09–0.15).
+- **Letting looks recalibrate the memory barely helps:** fitting per-band gains from the revealed pixels adds +0.03 dB. P3 under-predicts fine detail by 7–26%, but its errors are mostly in what and where, not how much.
+- Of the total 4.30 dB over the coarse image, 54% is looking where the picture is busy, 30% is the old P3 reconstruction, and 16% is the new memory-guided looking plus feedback.
+
 ## Run
 
 1. Open `index.html` directly in Chrome / Firefox / Edge (no server).
@@ -56,6 +73,8 @@ The trained `data/patch_bsds.js` is embedded as JavaScript for local `file://` u
 node --check eye.js
 node tests/smoke.cjs
 node tests/benchmark.cjs
+node tests/benchmark_v2.cjs dev    # v2 on the four bundled photos
+node tests/benchmark_v2.cjs test   # v2 on 200 BSDS500 test photos (data/bsds_test_96x64.bin)
 ```
 
 Node 22+ is recommended; no `npm install` or Python dependencies. GitHub Actions runs the smoke checks on pushes; the four-photo benchmark also has a manually rerunnable workflow.
@@ -82,6 +101,9 @@ Node 22+ is recommended; no `npm install` or Python dependencies. GitHub Actions
 | [`.github/workflows/check.yml`](.github/workflows/check.yml) | Node test workflow |
 | [`.github/workflows/static.yml`](.github/workflows/static.yml) | Existing GitHub Pages deployment (unchanged) |
 | [`PREREG.md`](PREREG.md) | Predictions and kill criteria |
+| [`PREREG_V2.md`](PREREG_V2.md), [`RESULTS_V2.md`](RESULTS_V2.md) | v2 gates and results |
+| [`tests/benchmark_v2.cjs`](tests/benchmark_v2.cjs) | v2 benchmark: memory-free controls, feedback v2, look-conditioned gain |
+| `data/bsds_test_96x64.bin` | 200 BSDS500 test-split photos at 96×64 grayscale, built by `tools/make_test_set.cjs` |
 
 The original code and exported model derive from **[anttiluode/SihtiImageModel](https://github.com/anttiluode/SihtiImageModel)**. Dataset photographs are from its published BSDS500 demonstration; check the original dataset's terms separately from the software license. No claims of new Hopfield networks, new Bayesian experimental design, or new biological neuron mechanisms are made.
 

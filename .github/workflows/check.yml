@@ -15,3 +15,4 @@ jobs:
           node-version: "22"
       - run: node --check eye.js
       - run: node tests/smoke.cjs
+      - run: node tests/benchmark_v2.cjs dev

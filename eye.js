@@ -6,7 +6,7 @@
 (function(root){
 "use strict";
 const DEPTHS=[0,1,4,16,64], STRIDES={0:1,1:1,2:2,3:4}, P=4, G=5, EPS=0.02, TILE=8;
-const POLICIES=["fixed","random","edge","disagree","feedback","oracle"];
+const POLICIES=["fixed","random","edge","disagree","feedback","feedback2","oracle"];
 const max=(v,a,b)=>Math.max(a,Math.min(b,v));
 function decode(o){
   const raw=atob(o.b64), bytes=new Uint8Array(raw.length);
@@ -97,25 +97,27 @@ function predictBand(coarse,w,h,b,model){
 }
 function reconstruct(input,w,h,model){
   const bs=sieve(input,w,h),coarse=sum(bs[3],bs[4]);
-  let current=coarse,lastUnc=null;const stages=[{label:"core + r3",image:coarse}];
-  for(const b of [2,1,0]){const p=predictBand(current,w,h,b,model);current=sum(current,p.out);lastUnc=p.unc;stages.push({label:"through r"+b,image:current});}
-  return {truth:Float32Array.from(input),given:coarse,pred:current,unc:lastUnc,w,h,stages};
+  let current=coarse,lastUnc=null;const stages=[{label:"core + r3",image:coarse}],parts=[];
+  for(const b of [2,1,0]){const p=predictBand(current,w,h,b,model);current=sum(current,p.out);lastUnc=p.unc;parts.push(p.out);stages.push({label:"through r"+b,image:current});}
+  // v2: keep the three predicted bands (p2, p1, p0) and the visible r3 band separately
+  return {truth:Float32Array.from(input),given:coarse,pred:current,unc:lastUnc,w,h,stages,parts,r3:bs[3]};
 }
 function psnr(pred,truth){let mse=0;for(let i=0;i<pred.length;i++){const e=max(pred[i],0,1)-truth[i];mse+=e*e;}return 10*Math.log10(1/Math.max(1e-12,mse/pred.length));}
 function tiles(scene){
   const {w,h,unc,given,pred,truth}=scene, nx=w/TILE,ny=h/TILE, a=[];
   if(w%TILE||h%TILE)throw Error("Image size must be a multiple of "+TILE);
   for(let ty=0;ty<ny;ty++)for(let tx=0;tx<nx;tx++){
-    let disagreement=0,edge=0,error=0;
+    let disagreement=0,edge=0,error=0,r3energy=0;
     for(let y=ty*TILE;y<(ty+1)*TILE;y++)for(let x=tx*TILE;x<(tx+1)*TILE;x++){
       const i=y*w+x,e=max(pred[i],0,1)-truth[i];
       disagreement+=unc[i];
+      if(scene.r3)r3energy+=scene.r3[i]*scene.r3[i];
       error+=e*e;
       const gx=given[y*w+Math.min(w-1,x+1)]-given[y*w+Math.max(0,x-1)];
       const gy=given[Math.min(h-1,y+1)*w+x]-given[Math.max(0,y-1)*w+x];
       edge+=Math.sqrt(gx*gx+gy*gy);
     }
-    a.push({tx,ty,index:a.length,disagreement:disagreement/64,edge:edge/64,error:error/64});
+    a.push({tx,ty,index:a.length,disagreement:disagreement/64,edge:edge/64,error:error/64,r3energy:r3energy/64});
   }
   return a;
 }
@@ -127,7 +129,7 @@ function selectNext(policy,ts,seen,observed,seed){
   if(policy==="random"){const order=ts.map(t=>t.index),shuffle=rng(seed);for(let i=order.length-1;i>0;i--){const j=Math.floor(shuffle()*(i+1));[order[i],order[j]]=[order[j],order[i]];}return ts[order.find(i=>!seen.has(i))];}
   let best=null,bs=-Infinity;
   for(const t of remaining){
-    let score=policy==="edge"?t.edge:policy==="oracle"?t.error:t.disagreement;
+    let score=policy==="edge"?t.edge:policy==="oracle"?t.error:policy==="r3energy"?t.r3energy:t.disagreement;
     if(policy==="feedback"){
       // Only already-revealed errors are allowed. A nearby observation tells us
       // whether our uncertainty proxy underestimated or overestimated error.
@@ -138,6 +140,18 @@ function selectNext(policy,ts,seen,observed,seed){
         d+=wt*ratio;n+=wt;
       }
       if(n>0)score*=max(0.3+0.7*d/n,0.2,4);
+    }
+    if(policy==="feedback2"&&observed.length){
+      // v2: scale-free ratio. Divide by the median ratio over observed tiles, so the
+      // score asks "is this neighbourhood worse than the memory's usual miss?"
+      const raw=observed.map(o=>o.error/(o.disagreement+1e-12)).sort((a,b)=>a-b);
+      const med=raw[Math.floor((raw.length-1)/2)]||1;
+      let d=0,n=0;
+      for(const o of observed){
+        const dd=(o.tx-t.tx)**2+(o.ty-t.ty)**2,wt=Math.exp(-dd/4);
+        d+=wt*max(o.error/(o.disagreement+1e-12)/med,0.2,5);n+=wt;
+      }
+      score*=max(0.3+0.7*d/n,0.2,4);
     }
     // deterministic tie breaks
     if(score>bs+1e-14){best=t;bs=score;}
@@ -172,7 +186,7 @@ function graph(canvas,sims,budget){
   const ctx=canvas.getContext("2d"),rect=canvas.getBoundingClientRect(),w=Math.max(320,rect.width||620),h=200,dpr=window.devicePixelRatio||1;
   canvas.width=Math.floor(w*dpr);canvas.height=Math.floor(h*dpr);ctx.setTransform(dpr,0,0,dpr,0,0);
   ctx.clearRect(0,0,w,h);ctx.fillStyle="#11242c";ctx.fillRect(0,0,w,h);
-  const colors={fixed:"#8d9ea6",random:"#c9a27b",edge:"#efb968",disagree:"#60d0cb",feedback:"#c2a0f8",oracle:"#f38f8a"};
+  const colors={fixed:"#8d9ea6",random:"#c9a27b",edge:"#efb968",disagree:"#60d0cb",feedback:"#c2a0f8",feedback2:"#e8e2a0",oracle:"#f38f8a"};
   let mn=Infinity,mx=-Infinity;for(const r of Object.values(sims))for(const v of r.history){mn=Math.min(mn,v);mx=Math.max(mx,v);}
   mn=Math.floor(mn-1);mx=Math.ceil(mx+1);
   const margin={l:44,r:14,t:15,b:27},x=t=>margin.l+(w-margin.l-margin.r)*t/budget,y=v=>h-margin.b-(h-margin.b-margin.t)*(v-mn)/(mx-mn);
@@ -231,7 +245,7 @@ function initUI(){
     $("next").textContent=nxt?"Next: tile ("+(nxt.tx+1)+", "+(nxt.ty+1)+")":"All 20 looks used";
     $("step").disabled=looks>=20;$("play").disabled=looks>=20;
     graph($("graph"),sims,20);
-    $("rows").innerHTML=POLICIES.map(p=>'<tr><td><span class="dot" style="background:'+({fixed:"#8d9ea6",random:"#c9a27b",edge:"#efb968",disagree:"#60d0cb",feedback:"#c2a0f8",oracle:"#f38f8a"}[p])+'"></span>'+({fixed:"Fixed grid",random:"Random",edge:"Coarse edges",disagree:"Expert disagreement",feedback:"Feedback",oracle:"Oracle (ceiling)"}[p])+'</td><td>'+sims[p].history[20].toFixed(2)+' dB</td><td>'+((sims[p].history[20]-sims[p].history[0])).toFixed(2)+' dB</td></tr>').join("");
+    $("rows").innerHTML=POLICIES.map(p=>'<tr><td><span class="dot" style="background:'+({fixed:"#8d9ea6",random:"#c9a27b",edge:"#efb968",disagree:"#60d0cb",feedback:"#c2a0f8",feedback2:"#e8e2a0",oracle:"#f38f8a"}[p])+'"></span>'+({fixed:"Fixed grid",random:"Random",edge:"Coarse edges",disagree:"Expert disagreement",feedback:"Feedback (v1, disconnected)",feedback2:"Feedback v2 (scale-free)",oracle:"Oracle (ceiling)"}[p])+'</td><td>'+sims[p].history[20].toFixed(2)+' dB</td><td>'+((sims[p].history[20]-sims[p].history[0])).toFixed(2)+' dB</td></tr>').join("");
   }
   function reset(){looks=0;render();}
   async function openScene(){
@@ -284,6 +298,47 @@ function initUI(){
   window.addEventListener("resize",()=>{if(scene)graph($("graph"),sims,20);});
   openScene();
 }
-root.SihtiEyeCore={DEPTHS,preparePatch,purify,sieve,predictBand,reconstruct,psnr,tiles,rng,selectNext,simulate};
+/* v2: looks recalibrate the memory.
+   Revealed pixels give the true fine detail t = truth - (core+r3). Fit one gain per predicted
+   band (p2, p1, p0) by ridge regression toward 1, refit after every look, and apply the gains to
+   every unrevealed pixel. mu and the [0,2] clamp are fixed in PREREG_V2.md. */
+function fitGains(scene,revealed,mu=0.5){
+  const P=scene.parts,A=[[0,0,0],[0,0,0],[0,0,0]],b=[0,0,0];
+  for(const i of revealed){
+    const t=scene.truth[i]-scene.given[i];
+    for(let r=0;r<3;r++){b[r]+=P[r][i]*t;for(let c=0;c<3;c++)A[r][c]+=P[r][i]*P[c][i];}
+  }
+  const tr=A[0][0]+A[1][1]+A[2][2];
+  if(!(tr>0))return [1,1,1];
+  const m=mu*tr/3,M=A.map((row,r)=>row.map((v,c)=>v+(r===c?m:0))),y=b.map(v=>v+m);
+  for(let k=0;k<3;k++){ // Gaussian elimination with partial pivoting
+    let piv=k;for(let r=k+1;r<3;r++)if(Math.abs(M[r][k])>Math.abs(M[piv][k]))piv=r;
+    [M[k],M[piv]]=[M[piv],M[k]];[y[k],y[piv]]=[y[piv],y[k]];
+    for(let r=k+1;r<3;r++){const f=M[r][k]/M[k][k];for(let c=k;c<3;c++)M[r][c]-=f*M[k][c];y[r]-=f*y[k];}
+  }
+  const g=[0,0,0];
+  for(let k=2;k>=0;k--){let s=y[k];for(let c=k+1;c<3;c++)s-=M[k][c]*g[c];g[k]=s/M[k][k];}
+  return g.map(v=>max(Number.isFinite(v)?v:1,0,2));
+}
+function simulate2(scene,policy,{steps=20,seed=17,base="p3",gain=false}={}){
+  const ts=tiles(scene),seen=new Set(),observed=[],selected=[],revealed=[],isRev=new Uint8Array(scene.truth.length);
+  const start=base==="coarse"?scene.given:scene.pred,out=Float32Array.from(start),gains=[];
+  const history=[psnr(out,scene.truth)];
+  for(let step=0;step<Math.min(steps,ts.length);step++){
+    const t=selectNext(policy,ts,seen,observed,seed);
+    seen.add(t.index);observed.push(t);selected.push(t);
+    for(let y=t.ty*TILE;y<(t.ty+1)*TILE;y++)for(let x=t.tx*TILE;x<(t.tx+1)*TILE;x++){
+      const i=y*scene.w+x;out[i]=scene.truth[i];isRev[i]=1;revealed.push(i);
+    }
+    if(gain&&base==="p3"){
+      const g=fitGains(scene,revealed);gains.push(g);
+      const P=scene.parts;
+      for(let i=0;i<out.length;i++)if(!isRev[i])out[i]=scene.given[i]+g[0]*P[0][i]+g[1]*P[1][i]+g[2]*P[2][i];
+    }
+    history.push(psnr(out,scene.truth));
+  }
+  return {history,selected,gains,image:out};
+}
+root.SihtiEyeCore={DEPTHS,preparePatch,purify,sieve,predictBand,reconstruct,psnr,tiles,rng,selectNext,simulate,fitGains,simulate2};
 if(typeof document!=="undefined")document.addEventListener("DOMContentLoaded",initUI);
 })(typeof window==="undefined"?globalThis:window);

@@ -15,7 +15,10 @@ jobs:
         with:
           node-version: "22"
       - run: node tests/benchmark.cjs
+      - run: node tests/benchmark_v2.cjs test
       - uses: actions/upload-artifact@v4
         with:
           name: sihti-eye-benchmark
-          path: results/node_benchmark.json
+          path: |
+            results/node_benchmark.json
+            results/v2_test.json

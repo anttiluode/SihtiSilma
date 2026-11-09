@@ -52,4 +52,32 @@ test("Oracle tile ranking is an optimal upper bound for fixed-size independent r
     for(let i=0;i<a.length;i++)assert.ok(oracle[i]+1e-7>=a[i],p+" step "+i);
   }
 });
+// ---- v2 ----
+test("v2 policies read no unobserved truth (feedback2 sees only observed tiles)",()=>{
+  const v=[
+    {index:0,tx:0,ty:0,edge:1,r3energy:1,disagreement:0.5,get error(){throw Error("Truth leaked")}},
+    {index:1,tx:1,ty:0,edge:0,r3energy:0,disagreement:2,get error(){throw Error("Truth leaked")}},
+    {index:2,tx:2,ty:0,edge:0,r3energy:0,disagreement:1,error:0.3}
+  ];
+  const seen=new Set([2]),observed=[v[2]];
+  for(const p of ["r3energy","feedback2"])assert.ok(E.selectNext(p,v,seen,observed,17));
+});
+test("v2 gain fit depends only on revealed pixels",()=>{
+  const W2=32,H2=32,im=Float32Array.from({length:W2*H2},(_,k)=>0.5+0.3*Math.sin(k*0.37)*Math.cos(k*0.011));
+  const s1=E.reconstruct(im,W2,H2,model),revealed=[];
+  for(let y=0;y<8;y++)for(let x=0;x<8;x++)revealed.push(y*W2+x);
+  const g1=E.fitGains(s1,revealed);
+  const s2={...s1,truth:Float32Array.from(s1.truth)};
+  for(let i=0;i<s2.truth.length;i++)if(!revealed.includes(i))s2.truth[i]=Math.random();
+  assert.deepEqual(E.fitGains(s2,revealed),g1);
+  assert.deepEqual(E.fitGains(s1,[]),[1,1,1]);
+  assert.ok(g1.every(g=>g>=0&&g<=2));
+});
+test("v2 paste-only runs never beat the oracle; gain runs stay finite",()=>{
+  const ora=E.simulate2(scene,"oracle",{steps:4}).history;
+  for(const p of ["random","edge","r3energy","disagree","feedback2"]){
+    const a=E.simulate2(scene,p,{steps:4}).history;a.forEach((v,i)=>assert.ok(ora[i]+1e-7>=v,p+" "+i));
+    const g=E.simulate2(scene,p,{steps:4,gain:true});assert.ok(g.history.every(Number.isFinite));
+  }
+});
 console.log(n+" tests passed.");

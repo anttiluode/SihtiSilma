@@ -14,7 +14,8 @@
   <div class="field"><label for="photo">Hidden photograph</label><select id="photo"></select></div>
   <div class="field"><label for="policy">Observation policy</label><select id="policy">
     <option value="disagree">Maximum expert disagreement</option>
-    <option value="feedback">Disagreement + measured feedback</option>
+    <option value="feedback2">Disagreement + feedback v2 (scale-free)</option>
+    <option value="feedback">Feedback v1 (disconnected by a clamp)</option>
     <option value="edge">Coarse-image edges</option>
     <option value="random">Seeded random tiles</option>
     <option value="fixed">Fixed raster scan</option>
@@ -45,7 +46,7 @@
 <section class="analysis">
   <div class="sectiontitle"><h2>How much did each question buy?</h2><p>Same photograph, same P3 prediction, same 8×8 observation cost, same 20-look budget.</p></div>
   <canvas id="graph" aria-label="PSNR against number of observed tiles"></canvas>
-  <div class="legend"><span><i style="background:#8d9ea6"></i>Fixed</span><span><i style="background:#c9a27b"></i>Random</span><span><i style="background:#efb968"></i>Edges</span><span><i style="background:#60d0cb"></i>Disagreement</span><span><i style="background:#c2a0f8"></i>Feedback</span><span><i style="background:#f38f8a"></i>Oracle</span></div>
+  <div class="legend"><span><i style="background:#8d9ea6"></i>Fixed</span><span><i style="background:#c9a27b"></i>Random</span><span><i style="background:#efb968"></i>Edges</span><span><i style="background:#60d0cb"></i>Disagreement</span><span><i style="background:#c2a0f8"></i>Feedback v1</span><span><i style="background:#e8e2a0"></i>Feedback v2</span><span><i style="background:#f38f8a"></i>Oracle</span></div>
   <div class="tablebox"><table><thead><tr><th>Policy</th><th>PSNR after 20 looks</th><th>Gain over P3</th></tr></thead><tbody id="rows"></tbody></table></div>
   <div class="actions"><button id="benchmark">Run all 4 held-out photos</button><a id="download" hidden download="sihti-eye-benchmark.json">Download results JSON</a></div>
   <pre id="benchmarkResults" hidden></pre>
