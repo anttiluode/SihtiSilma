@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#0d1b22"><title>Sihti Silmä — an eye that chooses where to look</title>
+<meta name="description" content="An active eye built on the original SihtiImageModel patch memory. Compare six observation policies at equal budget on held-out photos.">
+<link rel="stylesheet" href="style.css"></head><body>
+<main>
+<header>
+  <div class="overline">SIHTI SILMÄ / RESEARCH LAB 01 <span class="line"></span> NO BACKPROP · NO CLOUD · REAL P3 MEMORY</div>
+  <h1>What should <em>the eye</em><br>look at next?</h1>
+  <p class="lede">A photograph is decomposed into Sihti residues. The original 512-expert patch memory reconstructs missing detail. A small observer gets just <strong>one 8×8 tile per question</strong>. Which question reveals the most?</p>
+  <p class="source">Built on <a href="https://github.com/anttiluode/SihtiImageModel">SihtiImageModel</a> · Original trained BSDS500 patch memory · <a href="https://github.com/anttiluode/SihtiSilma">Source and tests</a></p>
+</header>
+<section class="controls">
+  <div class="field"><label for="photo">Hidden photograph</label><select id="photo"></select></div>
+  <div class="field"><label for="policy">Observation policy</label><select id="policy">
+    <option value="disagree">Maximum expert disagreement</option>
+    <option value="feedback">Disagreement + measured feedback</option>
+    <option value="edge">Coarse-image edges</option>
+    <option value="random">Seeded random tiles</option>
+    <option value="fixed">Fixed raster scan</option>
+    <option value="oracle">Oracle — hidden truth (ceiling)</option>
+  </select></div>
+  <div class="field narrow"><label for="seed">Random seed</label><input id="seed" type="number" value="17" min="1" max="999999"></div>
+  <div class="field upload"><label for="upload">Or try your own photo</label><input id="upload" type="file" accept="image/*"></div>
+</section>
+<div class="runbar">
+  <button id="step" class="primary" disabled>Look once <span class="kbd">→</span></button>
+  <button id="play" disabled>Play 20 looks</button>
+  <button id="reset">Reset eye</button>
+  <div class="live" id="status" aria-live="polite">Loading the original memory…</div>
+</div>
+<section class="metrics">
+  <div class="metric"><span>Observed</span><strong id="observed">0 / 96 tiles</strong><small id="share">0.0%</small></div>
+  <div class="metric"><span>Before looking</span><strong id="basepsnr">— dB</strong><small>Baseline P3 PSNR</small></div>
+  <div class="metric"><span>After looking</span><strong id="psnr">— dB</strong><small>Higher is better</small></div>
+  <div class="metric warm"><span>Decision</span><strong id="next">Preparing…</strong><small>Selected without truth except oracle</small></div>
+</section>
+<section class="vision">
+  <div class="panel"><div class="panel-title"><strong>01 / Hidden original</strong><span>Visible to you, not the policy</span></div><canvas id="truth" width="96" height="64" aria-label="Original held-out photo"></canvas></div>
+  <div class="panel"><div class="panel-title"><strong>02 / Given to the eye</strong><span>Sihti core + r3 only</span></div><canvas id="given" width="96" height="64" aria-label="Only coarse Sihti bands initially visible"></canvas></div>
+  <div class="panel"><div class="panel-title"><strong>03 / P3 reconstruction</strong><span>Predict r2 → r1 → r0</span></div><canvas id="prediction" width="96" height="64" aria-label="Sihti patch-memory prediction"></canvas></div>
+  <div class="panel"><div class="panel-title"><strong>04 / Eye after observations</strong><span>Truth revealed only in visited tiles</span></div><canvas id="current" width="96" height="64" aria-label="Reconstruction improved by selected observations"></canvas></div>
+  <div class="panel wide"><div class="panel-title"><strong>05 / The question surface</strong><span>Warm = stronger query score · outlines = visited</span></div><canvas id="scores" width="96" height="64" aria-label="Spatial map of query scores"></canvas><p class="fine">For disagreement, the map is the weighted variance of three competing P3 fine-residue experts at each location. This is a <em>proxy</em>, not a calibrated probability.</p></div>
+</section>
+<section class="analysis">
+  <div class="sectiontitle"><h2>How much did each question buy?</h2><p>Same photograph, same P3 prediction, same 8×8 observation cost, same 20-look budget.</p></div>
+  <canvas id="graph" aria-label="PSNR against number of observed tiles"></canvas>
+  <div class="legend"><span><i style="background:#8d9ea6"></i>Fixed</span><span><i style="background:#c9a27b"></i>Random</span><span><i style="background:#efb968"></i>Edges</span><span><i style="background:#60d0cb"></i>Disagreement</span><span><i style="background:#c2a0f8"></i>Feedback</span><span><i style="background:#f38f8a"></i>Oracle</span></div>
+  <div class="tablebox"><table><thead><tr><th>Policy</th><th>PSNR after 20 looks</th><th>Gain over P3</th></tr></thead><tbody id="rows"></tbody></table></div>
+  <div class="actions"><button id="benchmark">Run all 4 held-out photos</button><a id="download" hidden download="sihti-eye-benchmark.json">Download results JSON</a></div>
+  <pre id="benchmarkResults" hidden></pre>
+</section>
+<section class="explain">
+  <div class="sectiontitle"><h2>What this experiment does <em>not</em> claim</h2></div>
+  <div class="explain-grid"><div><h3>Not a new vision model</h3><p>The patch memory is copied from the original SihtiImageModel BSDS500 export. This is an <strong>active-observation experiment</strong> around a fixed reconstruction, not retraining P3.</p></div>
+  <div><h3>Not an information-gain oracle</h3><p>Three nearby experts produce a variance proxy. Their probabilities are distance weights, not calibrated posteriors. Disagreement may fail to predict true error. The oracle uses hidden truth only as a retrospective bound.</p></div>
+  <div><h3>Not yet a full closed-loop completion model</h3><p>Looking replaces an observed tile with its exact pixels; the other tiles keep the original P3 prediction. The feedback policy updates its <em>next-location score</em>, not its reconstruction weights. Re-running Sihti completion after every measurement is a separate gate.</p></div></div>
+  <p class="fine">Run locally: open <code>index.html</code> in your browser. Assets are bundled; nothing is fetched from a server. The four photographs were distributed as held-out examples in SihtiImageModel. RGB inputs are converted to 96×64 grayscale for this inexpensive browser test, so these measurements are <strong>not</strong> comparable to the parent repo’s full-size BSDS500 benchmark.</p>
+</section>
+<footer>SIHTI SILMÄ · If the eye knows what it cannot distinguish, does it know where to look next? <a href="https://github.com/anttiluode/SihtiSilma">GitHub</a></footer>
+</main><script src="data/patch_bsds.js"></script><script src="eye.js"></script></body></html>
