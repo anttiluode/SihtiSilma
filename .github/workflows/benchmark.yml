@@ -1,0 +1,21 @@
+name: Sihti Eye four-photo benchmark
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'tests/benchmark.cjs'
+permissions:
+  contents: read
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: node tests/benchmark.cjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sihti-eye-benchmark
+          path: results/node_benchmark.json
