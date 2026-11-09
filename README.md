@@ -2,7 +2,7 @@
 
 **An eye that decides where to look next.** A zero-server browser laboratory for *active sensing* over the original [SihtiImageModel](https://github.com/anttiluode/SihtiImageModel) BSDS500-trained patch memory.
 
-**[Open the Pages laboratory](https://anttiluode.github.io/SihtiSilma/)** · [Experiment plan](PREREG.md) · [Source](eye.js)
+**[Open the Pages laboratory](https://anttiluode.github.io/SihtiSilma/)** · [Measured results](RESULTS.md) · [Experiment plan](PREREG.md) · [Source](eye.js)
 
 > Question: if a memory can reconstruct an image but remains uncertain about its missing details, can it choose the most useful small spatial measurement without looking at the hidden original?
 
@@ -29,6 +29,17 @@
 
 At each step the selected tile replaces P3's estimate with the observed pixel values. The other regions stay fixed. The *feedback* policy updates its location-selection score using observed errors, but **P3 is not rerun after the observation** and its experts are not modified. This is a controlled first experiment in selecting measurements, **not yet** a fully recurrent active reconstruction architecture.
 
+
+## First measured result (four included photos)
+
+At **20 looks** (20.8% of image pixels revealed), mean PSNR was:
+
+| Fixed | Random | Coarse edges | Expert disagreement | Feedback | Oracle |
+|---:|---:|---:|---:|---:|---:|
+| 24.43 | 24.70 | 27.50 | **27.91** | 27.91 | 28.67 |
+
+**Disagreement: +3.21 dB over random — passes the pre-registered gate.** However, the gain over the strong coarse-edge baseline is only +0.41 dB, and **feedback adds 0.00 dB — fails its gate**. Four scenes are insufficient for broad claims. See [RESULTS.md](RESULTS.md) for per-image results, caveats, and the [actual GitHub Actions run](https://github.com/anttiluode/SihtiSilma/actions/runs/42649869626).
+
 ## Run
 
 1. Open \`index.html\` directly in Chrome / Firefox / Edge (no server).
@@ -44,9 +55,10 @@ The trained \`data/patch_bsds.js\` is embedded as JavaScript for local \`file://
 \`\`\`bash
 node --check eye.js
 node tests/smoke.cjs
+node tests/benchmark.cjs
 \`\`\`
 
-Node 22+ is recommended; no \`npm install\` or Python dependencies. GitHub Actions runs the same checks on pushes.
+Node 22+ is recommended; no \`npm install\` or Python dependencies. GitHub Actions runs the smoke checks on pushes; the four-photo benchmark also has a manually rerunnable workflow.
 
 ## Research honesty
 
